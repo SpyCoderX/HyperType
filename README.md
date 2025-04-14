@@ -1,4 +1,5 @@
 **About**
+
 *HyperType* is a language and game engine rolled into one. 
 
 The goal of *HyperType* is to provide utility and simplicity along with speed in a single app.
