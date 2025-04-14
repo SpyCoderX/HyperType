@@ -1,4 +1,4 @@
-**About**
+# About
 
 *HyperType* is a language and game engine rolled into one. 
 
