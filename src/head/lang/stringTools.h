@@ -26,6 +26,7 @@ class JsonArray {
         std::string toString() const;
 };
 std::string vecToStr(const std::vector<std::string>& vec);
+std::string mapToStr(const std::unordered_map<std::string,std::string>& map);
 std::string toStr(const std::any& obj);
 std::string toStrFormatted(const std::any& obj);
 std::string indentNewlines(const std::string &str);

@@ -15,6 +15,18 @@ std::string vecToStr(const std::vector<std::string>& vec) {
     result += "]";
     return result;
 }
+std::string mapToStr(const std::unordered_map<std::string,std::string>& map) {
+    std::string result;
+    result += "{";
+    for (auto it = map.begin(); it != map.end(); ++it) {
+        result += "\"" + it->first + "\": \"" + it->second + "\"";
+        if (std::next(it) != map.end()) {
+            result += ", ";
+        }
+    }
+    result += "}";
+    return result;
+}
 
 std::string toStr(const std::any& obj) {
     if (obj.type() == typeid(int)) 
@@ -43,6 +55,23 @@ std::string toStr(const std::any& obj) {
     else if (obj.type() == typeid(std::vector<std::string>)) 
     {
         return vecToStr(std::any_cast<std::vector<std::string>>(obj));
+    }
+    else if (obj.type() == typeid(std::vector<std::any>))
+    {
+        std::vector<std::string> vec;
+        for (std::any& item : std::any_cast<std::vector<std::any>>(obj)) {
+            vec.push_back(toStr(item));
+        }
+        return vecToStr(vec);
+    }
+    else if (obj.type() == typeid(std::unordered_map<std::any, std::any>)) 
+    {
+        std::unordered_map<std::string, std::string> map;
+        for (const auto& pair : std::any_cast<std::unordered_map<std::any, std::any>>(obj)) {
+            map[toStrFormatted(pair.first)] = toStrFormatted(pair.second);
+        }
+        return mapToStr(map);
+
     }
     else if (obj.type() == typeid(JsonObject)) 
     {

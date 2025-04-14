@@ -48,6 +48,7 @@ namespace Nodes {
         public:
             Expression(std::weak_ptr<Base> parentPointer, std::string n) 
                 : Base(parentPointer, n) {}
+            virtual std::any evaluate(); // Default evaluate method
     };
 
     class Statement : public Expression {

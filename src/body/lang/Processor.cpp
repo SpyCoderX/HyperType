@@ -12,6 +12,7 @@
 #include "../../head/lang/Processor.h"
 #include "../../head/lang/stringTools.h"
 #include "../../head/color/consoleColors.h"
+#include "../../head/lang/operatorTools.h"
 
 
 namespace ProcessorTests {
@@ -101,6 +102,11 @@ namespace Nodes {
         // Default implementation does nothing
         // Derived classes can override this method to provide specific processing
     }
+    std::any Expression::evaluate() {
+        // Default implementation does nothing
+        // Derived classes can override this method to provide specific evaluation
+        return NullObject();
+    }
     std::any& Base::getVar(const std::string& label) {
         if (parent.expired()) {
             static std::any empty = NullObject();
@@ -170,6 +176,10 @@ namespace Nodes {
                     base.add("condition",condition ? condition->toJSON() : JsonObject());
                     return base;
                 }
+                std::any evaluate() override {
+                    // Evaluate the condition expression
+                    return condition->evaluate();
+                }
         };
         class BinaryExpression : public Expression {
             public:
@@ -186,6 +196,41 @@ namespace Nodes {
                     json.add("right", right ? right->toJSON() : JsonObject());
                     return json;
                 }
+                std::any evaluate() {
+                    // Evaluate the left and right expressions
+                    std::any leftValue = left->evaluate();
+                    std::any rightValue = right->evaluate();
+
+                    // Perform the operation based on the operator
+                    if (op == "+") {
+                        return OperatorTools::add(leftValue, rightValue);
+                    } else if (op == "-") {
+                        return OperatorTools::subtract(leftValue, rightValue);
+                    } else if (op == "*") {
+                        return OperatorTools::multiply(leftValue, rightValue);
+                    } else if (op == "/") {
+                        return OperatorTools::divide(leftValue, rightValue);
+                    } else if (op == "%") {
+                        return OperatorTools::modulus(leftValue, rightValue);
+                    } else if (op == "==") {
+                        return OperatorTools::equals(leftValue, rightValue);
+                    } else if (op == "!=") {
+                        return OperatorTools::notEquals(leftValue, rightValue);
+                    } else if (op == "<") {
+                        return OperatorTools::lessThan(leftValue, rightValue);
+                    } else if (op == ">") {
+                        return OperatorTools::greaterThan(leftValue, rightValue);
+                    } else if (op == "<=") {
+                        return OperatorTools::lessThanOrEqual(leftValue, rightValue);
+                    } else if (op == ">=") {
+                        return OperatorTools::greaterThanOrEqual(leftValue, rightValue);
+                    } else if (op == "&&") {
+                        return OperatorTools::logicalAnd(leftValue, rightValue);
+                    } else if (op == "||") {
+                        return OperatorTools::logicalOr(leftValue, rightValue);
+                    }
+                    return NullObject();
+                }
         };
         class UnaryExpression : public Expression {
             public:
@@ -199,6 +244,18 @@ namespace Nodes {
                     json.add("operand", expr ? expr->toJSON() : JsonObject());
                     return json;
                 }
+                std::any evaluate() {
+                    // Evaluate the operand expression
+                    std::any operandValue = expr->evaluate();
+
+                    // Perform the operation based on the operator
+                    if (op == "-") {
+                        return OperatorTools::negate(operandValue);
+                    } else if (op == "!") {
+                        return OperatorTools::logicalNot(operandValue);
+                    }
+                    return NullObject();
+                }
         };
         class ParenthesisExpression : public Expression {
             public:
@@ -206,6 +263,16 @@ namespace Nodes {
 
                 ParenthesisExpression(std::weak_ptr<Base> parentPointer, std::string n)
                     : Expression(parentPointer, n) {}
+                
+                JsonObject toJSON() override {
+                    JsonObject json = Expression::toJSON();
+                    json.add("expression", expr ? expr->toJSON() : JsonObject());
+                    return json;
+                }
+                std::any evaluate() {
+                    // Evaluate the expression inside the parentheses
+                    return expr->evaluate();
+                }
         };
 
         class Value : public Expression {
@@ -221,6 +288,9 @@ namespace Nodes {
                     JsonObject json = Expression::toJSON();
                     json.add("value", get());
                     return json;
+                }
+                std::any evaluate() override {
+                    return get();
                 }
         };
 
@@ -408,6 +478,36 @@ namespace Nodes {
         if (token == "true" || token == "false") {
             start++; // Move past the boolean
             return std::make_shared<Nodes::Expressions::Value>(std::weak_ptr<Nodes::Base>(), "Boolean", token == "true");
+        }
+
+        // Handle dictionaries (also called maps)
+        if (token == "{") {
+            start++; // Move past the opening brace
+            std::vector<std::pair<Nodes::Expression,Nodes::Expression>> dictExpressions;
+            
+            if (start == end || *start != "}") {
+                throw std::runtime_error("Expected '}' to close dictionary.");
+            }
+            start++; // Move past the closing brace
+            return std::make_shared<Nodes::Expressions::Value>(std::weak_ptr<Nodes::Base>(), "Dictionary", dictExpressions);
+        }
+
+        // Handle arrays
+        if (token == "[") {
+            start++; // Move past the opening bracket
+            std::vector<Nodes::Expression> arrayExpressions;
+            while (start != end && *start != "]") {
+                auto expr = parse(start, end);
+                arrayExpressions.push_back(*expr);
+                if (start != end && *start == ",") {
+                    start++; // Move past the comma
+                }
+            }
+            if (start == end || *start != "]") {
+                throw std::runtime_error("Expected ']' to close array.");
+            }
+            start++; // Move past the closing bracket
+            return std::make_shared<Nodes::Expressions::Value>(std::weak_ptr<Nodes::Base>(), "Array", arrayExpressions);
         }
     
         // Handle numbers
