@@ -38,7 +38,7 @@ namespace ProcessorTests {
         std::shared_ptr<Nodes::Body> body = std::make_shared<Nodes::Body>();
         body->addVar("a", std::any(5));
         // Add tests for IfStatement and its derived classes
-        std::vector<std::string> tokens = {"if", "(","a", "==", "\"","null","\"", ")", "{", "return", "a;", "}"};
+        std::vector<std::string> tokens = {"if", "(","a", "==", "true", "+", "5", ".", "43", ")", "{", "return", "a;", "}"};
         auto start = tokens.begin();
         auto end = tokens.end();
         body->process(start, end); // Assuming process is a method that interprets the tokens and populates the body
@@ -167,7 +167,7 @@ namespace Nodes {
                 }
                 JsonObject toJSON() {
                     JsonObject base = Expression::toJSON();
-                    base.add("condition",toStr(condition ? condition->toJSON() : JsonObject()));
+                    base.add("condition",condition ? condition->toJSON() : JsonObject());
                     return base;
                 }
         };
@@ -403,6 +403,11 @@ namespace Nodes {
             auto uni_expr = std::make_shared<Nodes::Expressions::UnaryExpression>(std::weak_ptr<Nodes::Base>(), token, operand);
             uni_expr->expr->parent = std::weak_ptr<Nodes::Base>(uni_expr);
             return uni_expr;
+        }
+
+        if (token == "true" || token == "false") {
+            start++; // Move past the boolean
+            return std::make_shared<Nodes::Expressions::Value>(std::weak_ptr<Nodes::Base>(), "Boolean", token == "true");
         }
     
         // Handle numbers

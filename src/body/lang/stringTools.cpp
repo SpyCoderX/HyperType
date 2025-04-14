@@ -25,6 +25,9 @@ std::string toStr(const std::any& obj) {
     {
         return std::to_string(std::any_cast<double>(obj));
     }
+    else if (obj.type() == typeid(bool)) {
+        return std::any_cast<bool>(obj) ? "true" : "false";
+    }
     else if (obj.type() == typeid(std::string)) 
     {
         return std::any_cast<std::string>(obj);
@@ -86,7 +89,7 @@ std::string JsonObject::toString() const {
         // Indent and process newlines
         second = indentNewlines(second);
         // Append to result
-        result += "   "+it->first + ": " + second +"\n";
+        result += "   \""+it->first + "\": " + second + (std::next(it)!=data.end()?",\n":"\n");
     }
     result += "}";
     return result;
