@@ -8,6 +8,9 @@
 #include <any>
 #include "stringTools.h"
 
+
+
+
 namespace ProcessorTests {
     void testTokenizer();
     template<typename T>
@@ -37,10 +40,10 @@ namespace Nodes {
             virtual ~Base() {
             } // Add a virtual destructor to make the class polymorphic
 
-            std::string toString();
-            virtual JsonObject toJSON();
+            const std::string toString() const;
+            virtual const JsonObject toJSON() const;
             virtual void process(std::vector<std::string>::iterator& start, std::vector<std::string>::iterator end);
-            virtual std::any& getVar(const std::string& label);
+            virtual const std::any& getVar(const std::string& label) const;
             virtual void execute() {}
     };
 
@@ -56,7 +59,7 @@ namespace Nodes {
             std::shared_ptr<Expression> expression; // Child pointer as shared_ptr
             Statement(std::weak_ptr<Base> parentPointer, std::string n, std::shared_ptr<Expression> expr = nullptr) 
                 : Expression(parentPointer, n), expression(expr) {}
-            JsonObject toJSON() override;
+            const JsonObject toJSON() const override;
     };
 
     class Block : public Base {
@@ -70,10 +73,10 @@ namespace Nodes {
             template<typename T>
             void addVar(const std::string& label, T value);
 
-            std::any& getVar(const std::string& label) override;
+            const std::any& getVar(const std::string& label) const override;
             void process(std::vector<std::string>::iterator& start, std::vector<std::string>::iterator end);
 
-            JsonObject toJSON() override;
+            const JsonObject toJSON() const override;
     };
 
     namespace Expressions {
@@ -96,7 +99,7 @@ namespace Nodes {
                 }
                 void process(std::vector<std::string>::iterator& start, std::vector<std::string>::iterator end);
 
-                JsonObject toJSON() override;
+                const JsonObject toJSON() const override;
         };
 
         class ElseStatement : public Statement {
@@ -124,7 +127,7 @@ namespace Nodes {
     class Body : public Block {
         public:
             Body() : Block(std::weak_ptr<Base>(), "Main Body") {}
-            std::any& getVar(const std::string& label) override;
+            const std::any& getVar(const std::string& label) const override;
     };
 }
 
@@ -133,4 +136,19 @@ class Tokenizer {
         static std::vector<std::string> process(const std::string input);
 };
 
-#endif
+struct ExpressionHash {
+    std::size_t operator()(const std::shared_ptr<Nodes::Expression>& expr) const {
+        // Implement a hash function for Nodes::Expression
+        return std::hash<std::string>()(toStr(expr->evaluate()));
+    }
+};
+
+struct ExpressionEqual {
+    bool operator()(const std::shared_ptr<Nodes::Expression>& lhs, const std::shared_ptr<Nodes::Expression>& rhs) const {
+        // Implement equality comparison for Nodes::Expression
+        return toStr(lhs->evaluate()) == toStr(rhs->evaluate());
+    }
+};
+using Dictionary = std::unordered_map<std::shared_ptr<Nodes::Expression>,std::shared_ptr<Nodes::Expression>, ExpressionHash, ExpressionEqual>;
+using Array = std::vector<std::shared_ptr<Nodes::Expression>>;
+#endif // PROCESSOR_DEF

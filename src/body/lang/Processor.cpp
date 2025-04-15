@@ -39,7 +39,7 @@ namespace ProcessorTests {
         std::shared_ptr<Nodes::Body> body = std::make_shared<Nodes::Body>();
         body->addVar("a", std::any(5));
         // Add tests for IfStatement and its derived classes
-        std::vector<std::string> tokens = {"if", "(","a", "==", "true", "+", "5", ".", "43", ")", "{", "return", "a;", "}"};
+        std::vector<std::string> tokens = Tokenizer::process("if (a == {5:2,3:1}) { a = 10; }");
         auto start = tokens.begin();
         auto end = tokens.end();
         body->process(start, end); // Assuming process is a method that interprets the tokens and populates the body
@@ -92,11 +92,12 @@ namespace Nodes {
     std::shared_ptr<Nodes::Expression> parse(std::vector<std::string>::iterator& start, std::vector<std::string>::iterator end,uint32_t level = 0);
     std::shared_ptr<Nodes::Expression> parseFactor(std::vector<std::string>::iterator& start, std::vector<std::string>::iterator end);
 
-    std::string Base::toString() {
+
+    const std::string Base::toString() const {
         return name;
     }
-    JsonObject Base::toJSON() {
-        return JsonObject().add("type",toString()).add("parent",(!parent.expired())?parent.lock()->toString():"null");
+    const JsonObject Base::toJSON() const  {
+        return JsonObject().add("type",toString());//.add("parent",(!parent.expired())?parent.lock()->toString():"null");
     }
     void Base::process(std::vector<std::string>::iterator& start, std::vector<std::string>::iterator end) {
         // Default implementation does nothing
@@ -107,7 +108,7 @@ namespace Nodes {
         // Derived classes can override this method to provide specific evaluation
         return NullObject();
     }
-    std::any& Base::getVar(const std::string& label) {
+    const std::any& Base::getVar(const std::string& label) const {
         if (parent.expired()) {
             static std::any empty = NullObject();
             return empty;
@@ -115,7 +116,7 @@ namespace Nodes {
         return parent.lock()->getVar(label);
     }
 
-    JsonObject Statement::toJSON() {
+    const JsonObject Statement::toJSON() const {
         JsonObject json = Expression::toJSON();
         if (expression) {
             json.add("expression", expression->toJSON());
@@ -123,7 +124,7 @@ namespace Nodes {
         return json;
     }
 
-    JsonObject Block::toJSON() {
+    const JsonObject Block::toJSON() const {
         JsonObject json = Base::toJSON();
         JsonArray stmtsArray;
         for (const std::shared_ptr<Statement>& stmt : stmts) { // Updated to use shared_ptr
@@ -171,7 +172,7 @@ namespace Nodes {
                     condition->parent = std::weak_ptr<Base>(shared_from_this());
                     start = ++expressionEnd;
                 }
-                JsonObject toJSON() {
+                const JsonObject toJSON() const override {
                     JsonObject base = Expression::toJSON();
                     base.add("condition",condition ? condition->toJSON() : JsonObject());
                     return base;
@@ -190,7 +191,7 @@ namespace Nodes {
                 BinaryExpression(std::weak_ptr<Base> parentPointer,  std::shared_ptr<Expression> leftExpr, std::string oper)
                     : Expression(parentPointer, "Operator(Bi): "+oper), left(leftExpr), right(nullptr), op(oper) {
                     }
-                JsonObject toJSON() override {
+                const JsonObject toJSON() const override {
                     JsonObject json = Expression::toJSON();
                     json.add("left", left ? left->toJSON() : JsonObject());
                     json.add("right", right ? right->toJSON() : JsonObject());
@@ -239,7 +240,7 @@ namespace Nodes {
 
                 UnaryExpression(std::weak_ptr<Base> parentPointer, std::string oper, std::shared_ptr<Expression> operand)
                     : Expression(parentPointer, "Operator(Uni): "+oper), op(oper), expr(operand) {}
-                JsonObject toJSON() override {
+                const JsonObject toJSON() const override {
                     JsonObject json = Expression::toJSON();
                     json.add("operand", expr ? expr->toJSON() : JsonObject());
                     return json;
@@ -264,7 +265,7 @@ namespace Nodes {
                 ParenthesisExpression(std::weak_ptr<Base> parentPointer, std::string n)
                     : Expression(parentPointer, n) {}
                 
-                JsonObject toJSON() override {
+                const JsonObject toJSON() const override {
                     JsonObject json = Expression::toJSON();
                     json.add("expression", expr ? expr->toJSON() : JsonObject());
                     return json;
@@ -279,12 +280,12 @@ namespace Nodes {
             public:
                 std::any value;
                 Value(std::weak_ptr<Base> parentPointer, std::string n, std::any val) 
-                    : Expression(parentPointer, n), value(std::move(val)) {}
+                    : Expression(parentPointer, "Value: "+n), value(std::move(val)) {}
 
-                virtual std::any get() {
+                virtual std::any get() const {
                     return value;
                 }
-                JsonObject toJSON() override {
+                const JsonObject toJSON() const override {
                     JsonObject json = Expression::toJSON();
                     json.add("value", get());
                     return json;
@@ -302,10 +303,10 @@ namespace Nodes {
                     : Value(parentPointer, "Variable", std::any(2)), varLabel(label) {
                     }
 
-                std::any get() override {
+                std::any get() const override {
                     return Value::getVar(varLabel);
                 }
-                JsonObject toJSON() override {
+                const JsonObject toJSON() const override {
                     JsonObject json = Value::toJSON();
                     json.add("label", varLabel);
                     return json;
@@ -328,7 +329,7 @@ namespace Nodes {
             body->process(start, end); // Process the body block
 
         }
-        JsonObject IfStatement::toJSON() {
+        const JsonObject IfStatement::toJSON() const {
             JsonObject json = Statement::toJSON();
             json.add("body", body->toJSON());
             return json;
@@ -347,7 +348,7 @@ namespace Nodes {
     }
 
 
-    std::any& Block::getVar(const std::string& label) {
+    const std::any& Block::getVar(const std::string& label) const {
         auto it = variables.find(label);
         if (it == variables.end()) {
             return Base::getVar(label);
@@ -410,7 +411,7 @@ namespace Nodes {
         }
     }
 
-    std::any& Body::getVar(const std::string& label) {
+    const std::any& Body::getVar(const std::string& label) const {
         // Body should the top level scope, so throw an error if the variable is not found.
         auto it = variables.find(label);
         if (it == variables.end()) {
@@ -483,22 +484,36 @@ namespace Nodes {
         // Handle dictionaries (also called maps)
         if (token == "{") {
             start++; // Move past the opening brace
-            std::vector<std::pair<Nodes::Expression,Nodes::Expression>> dictExpressions;
+            
+            Dictionary dictExpressions;
+
+            while (start != end && *start != "}") {
+                auto keyExpr = parse(start, end);
+                if (start == end || *start != ":") {
+                    throw std::runtime_error("Expected ':' after dictionary key.");
+                }
+                start++; // Move past the colon
+                auto valueExpr = parse(start, end);
+                dictExpressions.insert({keyExpr,valueExpr});
+                if (start != end && *start == ",") {
+                    start++; // Move past the comma
+                }
+            }
             
             if (start == end || *start != "}") {
                 throw std::runtime_error("Expected '}' to close dictionary.");
             }
             start++; // Move past the closing brace
-            return std::make_shared<Nodes::Expressions::Value>(std::weak_ptr<Nodes::Base>(), "Dictionary", dictExpressions);
+            return std::make_shared<Nodes::Expressions::Value>(std::weak_ptr<Nodes::Base>(), "Dictionary", std::any(dictExpressions));
         }
 
         // Handle arrays
         if (token == "[") {
             start++; // Move past the opening bracket
-            std::vector<Nodes::Expression> arrayExpressions;
+            Array arrayExpressions;
             while (start != end && *start != "]") {
                 auto expr = parse(start, end);
-                arrayExpressions.push_back(*expr);
+                arrayExpressions.push_back(expr);
                 if (start != end && *start == ",") {
                     start++; // Move past the comma
                 }

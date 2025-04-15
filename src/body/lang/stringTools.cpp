@@ -6,6 +6,23 @@
 #include <iostream>
 #include "../../head/lang/stringTools.h"
 #include "../../head/lang/Processor.h"
+
+struct AnyHash {
+    std::size_t operator()(const std::any& expr) const {
+        // Implement a hash function for Nodes::Expression
+        return std::hash<std::string>()(toStr(expr));
+    }
+};
+
+struct AnyEqual {
+    bool operator()(const std::any& lhs, const std::any& rhs) const {
+        // Implement equality comparison for Nodes::Expression
+        return toStr(lhs) == toStr(rhs);
+    }
+};
+using AnyDictionary = std::unordered_map<std::any,std::any, AnyHash, AnyEqual>;
+
+
 std::string vecToStr(const std::vector<std::string>& vec) {
     std::string result;
     result += "[";
@@ -15,11 +32,11 @@ std::string vecToStr(const std::vector<std::string>& vec) {
     result += "]";
     return result;
 }
-std::string mapToStr(const std::unordered_map<std::string,std::string>& map) {
+std::string mapToStr(const AnyDictionary& map) {
     std::string result;
     result += "{";
     for (auto it = map.begin(); it != map.end(); ++it) {
-        result += "\"" + it->first + "\": \"" + it->second + "\"";
+        result += "" + toStrFormatted(it->first) + ": " + toStrFormatted(it->second) + "";
         if (std::next(it) != map.end()) {
             result += ", ";
         }
@@ -64,11 +81,20 @@ std::string toStr(const std::any& obj) {
         }
         return vecToStr(vec);
     }
-    else if (obj.type() == typeid(std::unordered_map<std::any, std::any>)) 
+    else if (obj.type() == typeid(Array))
     {
-        std::unordered_map<std::string, std::string> map;
-        for (const auto& pair : std::any_cast<std::unordered_map<std::any, std::any>>(obj)) {
-            map[toStrFormatted(pair.first)] = toStrFormatted(pair.second);
+        std::vector<std::string> vec;
+        for (const auto& item : std::any_cast<Array>(obj)) {
+            vec.push_back(toStr(item->toJSON()));
+        }
+        return vecToStr(vec);
+
+    }
+    else if (obj.type() == typeid(Dictionary)) 
+    {
+        AnyDictionary map;
+        for (const auto& pair : std::any_cast<Dictionary>(obj)) {
+            map[pair.first->evaluate()] = pair.second->evaluate();
         }
         return mapToStr(map);
 
@@ -88,7 +114,7 @@ std::string toStr(const std::any& obj) {
         return "null";
     }
     
-    return "Unknown Type";
+    return "Unknown Type: " + std::string(obj.type().name()); // Handle unknown types
 }
 
 std::string toStrFormatted(const std::any& obj) {
