@@ -8,7 +8,7 @@ This means *HyperType* has many functions and classes to allow programmers to qu
 **Roadmap to v1.0**
 - [x] Tokenizer
 - [ ] Intepreter
-  - [ ] Statements
+  - [x] Statements
     - [x] If
     - [ ] Else
     - [ ] Return
@@ -16,24 +16,24 @@ This means *HyperType* has many functions and classes to allow programmers to qu
     - [ ] For
     - [ ] Class
     - [ ] Function Creation
-      - [ ] <type> <name>(<args>){code}
+      - [ ] \<type> \<name>(\<args>){code}
     - [ ] Variable Assignment
-      - [ ] <name> \[+|-|*|/|%]= <expr>
+      - [ ] \<name> \[+|-|*|/|%]= \<expr>
   - [ ] Blocks
     - [x] Script Body
-    - [ ] Statement Block
+    - [x] Statement Block
   - [ ] Expressions
     - [ ] Binary Op
-      - [ ] +
-      - [ ] -
-      - [ ] *
-      - [ ] /
+      - [x] +
+      - [x] -
+      - [x] *
+      - [x] /
       - [ ] Assignment Op
         - [ ] =
         - [ ] <op>=
-    - [ ] Unary Op
-      - [ ] -(negate)
-      - [ ] !(not)
+    - [x] Unary Op
+      - [x] -(negate)
+      - [x] !(not)
 - [ ] Executor
 - [ ] Built-In Library
 - [ ] Game Engine

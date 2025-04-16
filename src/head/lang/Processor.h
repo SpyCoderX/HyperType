@@ -8,7 +8,14 @@
 #include <any>
 #include "stringTools.h"
 
-
+// Syntax
+// class <name> { <body> }
+// class <name> : <parent> { <body> }
+// <type> <name>(<args>) { <body> }
+// <variable> = <value>
+// <variable>.<method>(<args>)
+// <variable>.<property> is a <variable>
+// <variable>[<index>] is a <variable>
 
 
 namespace ProcessorTests {
@@ -26,6 +33,56 @@ namespace ProcessorTests {
     void testBlocks();
 
     void runTests();
+}
+
+namespace DataTypes {
+    class Data {
+        public:
+            std::string type;
+            Data (std::string _type) : type(_type) {}
+            Data (const Data& other) = default;
+            virtual ~Data() {}
+            virtual const std::string toString() const {
+                return type;
+            }
+            virtual const JsonObject toJSON() const {
+                return JsonObject().add("type", type);
+            }
+    };
+    class Null : public Data {
+        public:
+            Null() : Data("null") {}
+    };
+    class Primitive : public Data {
+        public:
+            std::any value;
+            Primitive(std::any v,std::string _type) : value(v), Data("primitive: "+_type) {}
+            const std::string toString() const override {
+                return toStr(value);
+            }
+            const JsonObject toJSON() const override {
+                JsonObject data = Data::toJSON();
+                data.add("value", value);
+                return data;
+            }
+    };
+    class String : public Primitive {
+        public:
+            String(std::string v) : Primitive(v,"string") {}
+    };
+    class Bool : public Primitive {
+        public:
+            Bool(bool v) : Primitive(v,"bool") {}
+    };
+    class Int : public Primitive {
+        public:
+            Int(int v) : Primitive(v,"int") {}
+    };
+    class Float : public Primitive {
+        public:
+            Float(float v) : Primitive(v,"float") {}
+    };
+    
 }
 
 namespace Nodes {
@@ -110,10 +167,25 @@ namespace Nodes {
                     : Statement(parentPointer, n) {
                 }
         };
+        class PrintStatement;
+        class ImportStatement;
 
         class WhileStatement;
         class ForStatement;
+
+        class BreakStatement;
+        class ContinueStatement;
+
+        class AssignmentStatement;
+
+        class FunctionStatement;
         class ReturnStatement;
+        
+        class ClassStatement;
+        
+        class SwitchStatement;
+        class CaseStatement;
+        
     }
 
     namespace Blocks {
@@ -149,6 +221,6 @@ struct ExpressionEqual {
         return toStr(lhs->evaluate()) == toStr(rhs->evaluate());
     }
 };
-using Dictionary = std::unordered_map<std::shared_ptr<Nodes::Expression>,std::shared_ptr<Nodes::Expression>, ExpressionHash, ExpressionEqual>;
-using Array = std::vector<std::shared_ptr<Nodes::Expression>>;
+using Dictionary = std::unordered_map<std::shared_ptr<Nodes::Expression>,std::shared_ptr<Nodes::Expressions::Variable>, ExpressionHash, ExpressionEqual>;
+using Array = std::vector<std::shared_ptr<Nodes::Expressions::Variable >>;
 #endif // PROCESSOR_DEF

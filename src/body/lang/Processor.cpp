@@ -546,7 +546,7 @@ namespace Nodes {
         if (token == "\"") {
             // Move past the opening quote
             start++;
-
+ 
             // Get the string value
             std::string strValue;
             if (*start == "\"") {
