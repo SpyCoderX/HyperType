@@ -81,23 +81,32 @@ std::string toStr(const std::any& obj) {
         }
         return vecToStr(vec);
     }
-    else if (obj.type() == typeid(Array))
+    else if (obj.type() == typeid(DataTypes::ArrayList))
     {
         std::vector<std::string> vec;
-        for (const auto& item : std::any_cast<Array>(obj)) {
-            vec.push_back(toStr(item->toJSON()));
+        for (const auto& item : std::any_cast<DataTypes::ArrayList>(obj)) {
+            vec.push_back(toStr(item.data.toJSON()));
         }
         return vecToStr(vec);
 
     }
-    else if (obj.type() == typeid(Dictionary)) 
+    else if (obj.type() == typeid(DataTypes::Dictionary)) 
     {
         AnyDictionary map;
-        for (const auto& pair : std::any_cast<Dictionary>(obj)) {
-            map[pair.first->evaluate()] = pair.second->evaluate();
+        for (const auto& pair : std::any_cast<DataTypes::Dictionary>(obj)) {
+            map[pair.first.value] = pair.second.data.value;
         }
         return mapToStr(map);
 
+    }
+    else if (obj.type() == typeid(DataTypes::Data)) {
+        return toStr(std::any_cast<DataTypes::Data>(obj).toJSON());
+    }
+    else if (obj.type() == typeid(DataTypes::Var)) {
+        return toStr(std::any_cast<DataTypes::Var>(obj).data.toJSON());
+    }
+    else if (obj.type() == typeid(DataTypes::Class)) {
+        return toStr(std::any_cast<DataTypes::Class>(obj).toJSON());
     }
     else if (obj.type() == typeid(JsonObject)) 
     {

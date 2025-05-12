@@ -8,6 +8,7 @@
 // Smart pointers
 #include <memory>
 #include <cassert>
+#include <optional>
 #include <cctype> // for isspace, isalpha, isdigit
 #include "../../head/lang/Processor.h"
 #include "../../head/lang/stringTools.h"
@@ -37,7 +38,7 @@ namespace ProcessorTests {
     void testIfStatement() {
         printf("- IfStatement...\n");
         std::shared_ptr<Nodes::Body> body = std::make_shared<Nodes::Body>();
-        body->addVar("a", std::any(5));
+        body->setVar("a", DataTypes::Int(5));
         // Add tests for IfStatement and its derived classes
         std::vector<std::string> tokens = Tokenizer::process("if (a == {5:2,3:1}) { a = 10; }");
         auto start = tokens.begin();
@@ -89,7 +90,7 @@ std::vector<std::vector<std::string>> operatorLevels = {
     {"*", "/"}
 };
 namespace Nodes {
-    std::shared_ptr<Nodes::Expression> parse(std::vector<std::string>::iterator& start, std::vector<std::string>::iterator end,uint32_t level = 0);
+    std::shared_ptr<Nodes::Expression> parse(std::vector<std::string>::iterator& start, std::vector<std::string>::iterator end,uint32_t level);
     std::shared_ptr<Nodes::Expression> parseFactor(std::vector<std::string>::iterator& start, std::vector<std::string>::iterator end);
 
 
@@ -103,17 +104,24 @@ namespace Nodes {
         // Default implementation does nothing
         // Derived classes can override this method to provide specific processing
     }
-    std::any Expression::evaluate() {
+    DataTypes::Data Expression::evaluate() {
         // Default implementation does nothing
         // Derived classes can override this method to provide specific evaluation
-        return NullObject();
+        return DataTypes::Null();
     }
-    const std::any& Base::getVar(const std::string& label) const {
+    const DataTypes::Var& Base::getVar(const std::string& label) const {
         if (parent.expired()) {
-            static std::any empty = NullObject();
+            static DataTypes::Var empty = DataTypes::Var(DataTypes::Null());
             return empty;
         }
         return parent.lock()->getVar(label);
+    }
+    const DataTypes::Class& Base::getClass(const std::string& label) const {
+        if (parent.expired()) { // TO DO: Create proper error handling for this case.
+            static DataTypes::Class empty = DataTypes::NullClassType();
+            return empty;
+        }
+        return parent.lock()->getClass(label);
     }
 
     const JsonObject Statement::toJSON() const {
@@ -177,7 +185,7 @@ namespace Nodes {
                     base.add("condition",condition ? condition->toJSON() : JsonObject());
                     return base;
                 }
-                std::any evaluate() override {
+                DataTypes::Data evaluate() override {
                     // Evaluate the condition expression
                     return condition->evaluate();
                 }
@@ -197,40 +205,40 @@ namespace Nodes {
                     json.add("right", right ? right->toJSON() : JsonObject());
                     return json;
                 }
-                std::any evaluate() {
+                DataTypes::Data evaluate() {
                     // Evaluate the left and right expressions
-                    std::any leftValue = left->evaluate();
-                    std::any rightValue = right->evaluate();
+                    DataTypes::Data leftValue = left->evaluate();
+                    DataTypes::Data rightValue = right->evaluate();
 
                     // Perform the operation based on the operator
                     if (op == "+") {
-                        return OperatorTools::add(leftValue, rightValue);
+                        return leftValue + rightValue;
                     } else if (op == "-") {
-                        return OperatorTools::subtract(leftValue, rightValue);
+                        return leftValue - rightValue;
                     } else if (op == "*") {
-                        return OperatorTools::multiply(leftValue, rightValue);
+                        return leftValue * rightValue;
                     } else if (op == "/") {
-                        return OperatorTools::divide(leftValue, rightValue);
+                        return leftValue / rightValue;
                     } else if (op == "%") {
-                        return OperatorTools::modulus(leftValue, rightValue);
+                        return leftValue % rightValue;
                     } else if (op == "==") {
-                        return OperatorTools::equals(leftValue, rightValue);
+                        return leftValue == rightValue;
                     } else if (op == "!=") {
-                        return OperatorTools::notEquals(leftValue, rightValue);
+                        return leftValue != rightValue;
                     } else if (op == "<") {
-                        return OperatorTools::lessThan(leftValue, rightValue);
+                        return leftValue < rightValue;
                     } else if (op == ">") {
-                        return OperatorTools::greaterThan(leftValue, rightValue);
+                        return leftValue > rightValue;
                     } else if (op == "<=") {
-                        return OperatorTools::lessThanOrEqual(leftValue, rightValue);
+                        return leftValue <= rightValue;
                     } else if (op == ">=") {
-                        return OperatorTools::greaterThanOrEqual(leftValue, rightValue);
+                        return leftValue >= rightValue;
                     } else if (op == "&&") {
-                        return OperatorTools::logicalAnd(leftValue, rightValue);
+                        return leftValue && rightValue;
                     } else if (op == "||") {
-                        return OperatorTools::logicalOr(leftValue, rightValue);
+                        return leftValue || rightValue;
                     }
-                    return NullObject();
+                    return DataTypes::Null();
                 }
         };
         class UnaryExpression : public Expression {
@@ -245,17 +253,19 @@ namespace Nodes {
                     json.add("operand", expr ? expr->toJSON() : JsonObject());
                     return json;
                 }
-                std::any evaluate() {
+                DataTypes::Data evaluate() {
                     // Evaluate the operand expression
-                    std::any operandValue = expr->evaluate();
+                    DataTypes::Data operandValue = expr->evaluate();
 
                     // Perform the operation based on the operator
                     if (op == "-") {
-                        return OperatorTools::negate(operandValue);
+                        return -operandValue; // Negation
                     } else if (op == "!") {
-                        return OperatorTools::logicalNot(operandValue);
+                        return !operandValue;
+                    } else if (op == "~") {
+                        return ~operandValue; // Bitwise NOT
                     }
-                    return NullObject();
+                    return DataTypes::Null();
                 }
         };
         class ParenthesisExpression : public Expression {
@@ -270,7 +280,7 @@ namespace Nodes {
                     json.add("expression", expr ? expr->toJSON() : JsonObject());
                     return json;
                 }
-                std::any evaluate() {
+                DataTypes::Data evaluate() {
                     // Evaluate the expression inside the parentheses
                     return expr->evaluate();
                 }
@@ -278,38 +288,213 @@ namespace Nodes {
 
         class Value : public Expression {
             public:
-                std::any value;
-                Value(std::weak_ptr<Base> parentPointer, std::string n, std::any val) 
-                    : Expression(parentPointer, "Value: "+n), value(std::move(val)) {}
+                DataTypes::Data value;
+                Value(std::weak_ptr<Base> parentPointer, DataTypes::Data val) 
+                    : Expression(parentPointer, "Value: " + val.type), value(std::move(val)) {}
 
-                virtual std::any get() const {
+                virtual DataTypes::Data get() const {
                     return value;
                 }
+
                 const JsonObject toJSON() const override {
                     JsonObject json = Expression::toJSON();
-                    json.add("value", get());
+                    json.add("value", get().toJSON());
                     return json;
                 }
-                std::any evaluate() override {
+
+                DataTypes::Data evaluate() override {
                     return get();
                 }
         };
 
-        class Variable : public Value {
+        class ArrayList : public Value {
             public:
-                std::string varLabel;
+                std::vector<std::shared_ptr<Expression>> elements; // Updated to shared_ptr
 
-                Variable(std::weak_ptr<Base> parentPointer, std::string label) 
-                    : Value(parentPointer, "Variable", std::any(2)), varLabel(label) {
+                ArrayList(std::weak_ptr<Base> parentPointer)
+                    : Value(parentPointer, DataTypes::Null()) {
                     }
 
-                std::any get() const override {
-                    return Value::getVar(varLabel);
+                DataTypes::Data get() const override {
+                    return Value::getVar("arrayList");
                 }
                 const JsonObject toJSON() const override {
                     JsonObject json = Value::toJSON();
-                    json.add("label", varLabel);
+                    JsonArray array;
+                    for (const auto& elem : elements) {
+                        array.append(elem->toJSON());
+                    }
+                    json.add("elements", array);
                     return json;
+                }
+                DataTypes::Data evaluate() override {
+                    // Evaluate the elements in the array list
+                    DataTypes::ArrayList evaluatedElements;
+                    for (const auto& elem : elements) {
+                        evaluatedElements.push_back(DataTypes::Var(elem->evaluate()));
+                    }
+                    return DataTypes::Array(evaluatedElements);
+                }
+                void process(std::vector<std::string>::iterator& start, std::vector<std::string>::iterator end) {
+                    if (start == end || *start != "[") {
+                        throw std::runtime_error("Expected '[' in array list.");
+                    }
+                    start++; // Move past '['
+
+                    while (start != end && *start != "]") {
+                        auto element = parse(start, end);
+                        elements.push_back(element); // Store the parsed element
+                        if (start != end && *start == ",") {
+                            start++; // Move past ','
+                        }
+                    }
+                    if (start == end || *start != "]") {
+                        throw std::runtime_error("Expected ']' in array list.");
+                    }
+                    start++; // Move past ']'
+                }
+                DataTypes::Data evaluate() override {
+                    // Evaluate the elements in the array list
+                    DataTypes::ArrayList evaluatedElements;
+                    for (const auto& elem : elements) {
+                        evaluatedElements.push_back(DataTypes::Var(elem->evaluate()));
+                    }
+                    return DataTypes::Array(evaluatedElements);
+                }
+        };
+        class MapDictionary : public Value {
+            public:
+                std::unordered_map<std::shared_ptr<Expression>, std::shared_ptr<Expression>> properties; // Updated to shared_ptr
+
+                MapDictionary(std::weak_ptr<Base> parentPointer)
+                    : Value(parentPointer, DataTypes::Null()) {
+                    }
+
+                DataTypes::Data get() const override {
+                    return Value::getVar("mapDictionary");
+                }
+                const JsonObject toJSON() const override {
+                    JsonObject json = Value::toJSON();
+                    JsonObject propertiesJson;
+                    for (const auto& pair : properties) {
+                        propertiesJson.add(pair.first->toJSON().toString(), pair.second->toJSON());
+                    }
+                    json.add("properties", propertiesJson);
+                    return json;
+                }
+                DataTypes::Data evaluate() override {
+                    // Evaluate the properties in the map dictionary
+                    DataTypes::Dictionary evaluatedProperties;
+                    for (const auto& pair : properties) {
+                        // Evaluate the key
+                        DataTypes::Data keyData = pair.first->evaluate();
+
+                        // Ensure the key is a Primitive
+                        auto keyPrimitive = dynamic_cast<DataTypes::Primitive*>(&keyData);
+                        if (!keyPrimitive) {
+                            throw std::runtime_error("Dictionary keys must be of type Primitive.");
+                        }
+
+                        // Evaluate the value
+                        DataTypes::Var valueVar = DataTypes::Var(pair.second->evaluate());
+
+                        // Insert into the dictionary
+                        evaluatedProperties[*keyPrimitive] = valueVar;
+                    }
+                    return DataTypes::Dict(evaluatedProperties);
+                }
+                void process(std::vector<std::string>::iterator& start, std::vector<std::string>::iterator end) {
+                    if (start == end || *start != "{") {
+                        throw std::runtime_error("Expected '{' in map dictionary.");
+                    }
+                    start++; // Move past '{'
+
+                    while (start != end && *start != "}") {
+                        auto key = parse(start, end);
+                        if (start == end || *start != ":") {
+                            throw std::runtime_error("Expected ':' in map dictionary.");
+                        }
+                        start++; // Move past ':'
+                        auto value = parse(start, end);
+                        properties[key] = value; // Store the parsed key-value pair
+                        if (start != end && *start == ",") {
+                            start++; // Move past ','
+                        }
+                    }
+                    if (start == end || *start != "}") {
+                        throw std::runtime_error("Expected '}' in map dictionary.");
+                    }
+                    start++; // Move past '}'
+                }
+
+        };
+
+        class VariableAccessor : public Expression {
+            protected:
+                VariableAccessor(std::weak_ptr<Base> parentPointer, std::shared_ptr<Expression> expr) 
+                    : Expression(parentPointer, "variable"), expression(expr) {
+                    }
+            public:
+                std::shared_ptr<Expression> expression; // Updated to shared_ptr
+                
+                VariableAccessor(std::weak_ptr<Base> parentPointer, std::string n) 
+                    : Expression(parentPointer, "variable"), expression(std::make_shared<Value>(std::weak_ptr<Base>(shared_from_this()), DataTypes::String(n))) {
+                    }
+
+                const DataTypes::Var& getVar() const {
+                    DataTypes::Data value = expression->evaluate();
+                    DataTypes::Primitive* primitive = dynamic_cast<DataTypes::Primitive*>(&value);
+                    if (primitive) {
+                        return Expression::getVar(static_cast<std::string>(*primitive)); // Assuming the primitive can be cast to a string
+                    } 
+                }
+                // Evaluate the expression and return the value
+                DataTypes::Data evaluate() override {
+                    return getVar().data;
+                }
+
+            
+        };
+        class VariableDeclaration; // A variable that is a reference to a value.
+        class VariableProperty; // A property of a variable, array, or dict which is itself a variable.
+
+        // Obsolete code for Variable class
+        // class Variable : public Value {
+        //     public:
+        //         std::string varLabel;
+
+        //         Variable(std::weak_ptr<Base> parentPointer, std::string label) 
+        //             : Value(parentPointer,DataTypes::Null()), varLabel(label) {
+        //             }
+
+        //         DataTypes::Data get() const override {
+        //             return Value::getVar(varLabel);
+        //         }
+        //         const JsonObject toJSON() const override {
+        //             JsonObject json = Value::toJSON();
+        //             json.add("label", varLabel);
+        //             return json;
+        //         }
+        // };
+        class ClassReference : public Expression {
+            public:
+                std::string className;
+                ClassReference(std::weak_ptr<Base> parentPointer, std::string name) 
+                    : Expression(parentPointer, "ClassReference"), className(name) {
+                    }
+
+                const JsonObject toJSON() const override {
+                    JsonObject json = Expression::toJSON();
+                    json.add("className", className);
+                    return json;
+                }
+                DataTypes::Class& get() const {
+                    DataTypes::Class classType = Expression::getClass(className);
+                    return classType;
+                }
+                DataTypes::Data evaluate() override {
+                    // Should not be evaluated directly, but can be used to get the class type.
+                    return DataTypes::Null();
                 }
         };
         
@@ -337,39 +522,39 @@ namespace Nodes {
     }
 
     
-    template<typename T>
-    void Block::addVar(const std::string& label, T value) {
-        // Check if the variable already exists
+    void Block::setVar(const std::string& label, DataTypes::Data value) {
         if (variables.find(label) != variables.end()) {
-            throw std::runtime_error("Variable '" + label + "' already exists in this scope.");
+            variables[label] = DataTypes::Var(value); // Update existing variable
         }
-        // Store the value in the unordered_map
-        variables[label] = value;
+        variables[label].data = value; // Add new variable
+    }
+    void Block::addClass(DataTypes::Class& classType) { // TO DO: Define checks so default class types are not overwritten.
+        if (classTypes.find(classType.name) != classTypes.end()) {
+            classTypes[classType.name] = classType; // Update existing class type
+        }
+        classTypes[classType.name] = classType; // Add new class type
     }
 
 
-    const std::any& Block::getVar(const std::string& label) const {
+    const DataTypes::Var& Block::getVar(const std::string& label) const {
         auto it = variables.find(label);
         if (it == variables.end()) {
             return Base::getVar(label);
         }
         return it->second;
     }
+    const DataTypes::Class& Block::getClass(const std::string& label) const {
+        auto it = classTypes.find(label);
+        if (it == classTypes.end()) {
+            return Base::getClass(label);
+        }
+        return it->second;
+    }
     void Block::process(std::vector<std::string>::iterator& start, std::vector<std::string>::iterator end) {
-        // This method should parse the tokens and create statements
-        // FUll implementation.
-        // Start with looping the tokens.
-        // Example code:
-        // if (a == b) {
-        //     // do something
-        // } else {
-        //     // do something else
-        // }
         while (start != end) {
             std::string token = *start;
             if (token == "if") {
-                // Handle IfStatement
-                std::shared_ptr<Nodes::Statements::IfStatement> ifStmt = std::make_shared<Nodes::Statements::IfStatement>(shared_from_this());
+                auto ifStmt = std::make_shared<Nodes::Statements::IfStatement>(shared_from_this());
                 stmts.push_back(ifStmt);
                 ifStmt->process(start, end);
             }
@@ -411,17 +596,25 @@ namespace Nodes {
         }
     }
 
-    const std::any& Body::getVar(const std::string& label) const {
+    const DataTypes::Var& Body::getVar(const std::string& label) const {
         // Body should the top level scope, so throw an error if the variable is not found.
         auto it = variables.find(label);
         if (it == variables.end()) {
-            throw std::runtime_error("Variable '" + label + "' not found in Body scope.");
+            throw std::runtime_error("Variable '" + label + "' not found in script scope.");
+        }
+        return it->second;
+    }
+    const DataTypes::Class& Body::getClass(const std::string& label) const {
+        // Body should the top level scope, so throw an error if the class is not found.
+        auto it = classTypes.find(label);
+        if (it == classTypes.end()) {
+            throw std::runtime_error("Class '" + label + "' not found in script scope.");
         }
         return it->second;
     }
 
     
-    std::shared_ptr<Nodes::Expression> parse(std::vector<std::string>::iterator& start, std::vector<std::string>::iterator end, uint32_t level) {
+    std::shared_ptr<Nodes::Expression> parse(std::vector<std::string>::iterator& start, std::vector<std::string>::iterator end, uint32_t level = 0) {
         if (level >= operatorLevels.size()) {
             return parseFactor(start, end);
         }
@@ -483,46 +676,16 @@ namespace Nodes {
 
         // Handle dictionaries (also called maps)
         if (token == "{") {
-            start++; // Move past the opening brace
-            
-            Dictionary dictExpressions;
-
-            while (start != end && *start != "}") {
-                auto keyExpr = parse(start, end);
-                if (start == end || *start != ":") {
-                    throw std::runtime_error("Expected ':' after dictionary key.");
-                }
-                start++; // Move past the colon
-                auto valueExpr = parse(start, end);
-                dictExpressions.insert({keyExpr,valueExpr});
-                if (start != end && *start == ",") {
-                    start++; // Move past the comma
-                }
-            }
-            
-            if (start == end || *start != "}") {
-                throw std::runtime_error("Expected '}' to close dictionary.");
-            }
-            start++; // Move past the closing brace
-            return std::make_shared<Nodes::Expressions::Value>(std::weak_ptr<Nodes::Base>(), "Dictionary", std::any(dictExpressions));
+            std::shared_ptr<Nodes::Expressions::MapDictionary> dictExpressions = std::make_shared<Nodes::Expressions::MapDictionary>(std::weak_ptr<Nodes::Base>());
+            dictExpressions->process(start, end); // Process the dictionary
+            return dictExpressions;
         }
 
         // Handle arrays
         if (token == "[") {
-            start++; // Move past the opening bracket
-            Array arrayExpressions;
-            while (start != end && *start != "]") {
-                auto expr = parse(start, end);
-                arrayExpressions.push_back(expr);
-                if (start != end && *start == ",") {
-                    start++; // Move past the comma
-                }
-            }
-            if (start == end || *start != "]") {
-                throw std::runtime_error("Expected ']' to close array.");
-            }
-            start++; // Move past the closing bracket
-            return std::make_shared<Nodes::Expressions::Value>(std::weak_ptr<Nodes::Base>(), "Array", arrayExpressions);
+            std::shared_ptr<Nodes::Expressions::ArrayList> arrayExpressions = std::make_shared<Nodes::Expressions::ArrayList>(std::weak_ptr<Nodes::Base>());
+            arrayExpressions->process(start, end); // Process the array
+            return arrayExpressions;
         }
     
         // Handle numbers
@@ -539,7 +702,8 @@ namespace Nodes {
         // Handle variables
         if (std::isalpha(token[0])) {
             start++; // Move past the variable
-            return std::make_shared<Nodes::Expressions::Variable>(std::weak_ptr<Nodes::Base>(), token);
+            // TO DO: Make a variables
+            return std::make_shared<Nodes::Expressions::VariableAccessor>(std::weak_ptr<Nodes::Base>(), token);
         }
 
         // Handle string literals
@@ -561,6 +725,20 @@ namespace Nodes {
     
         throw std::runtime_error("Unexpected token: " + token);
     }
+    // Example of a class reference:
+    // className
+    Expressions::ClassReference& parseClassReference(std::vector<std::string>::iterator& start, std::vector<std::string>::iterator end) {
+        if (start == end) {
+            throw std::runtime_error("Unexpected end of tokens while parsing class reference.");
+        }
+        std::string className = *start;
+        start++; // Move past the class name
+        if (className.empty() || !std::isalnum(className[0])) {
+            throw std::runtime_error("Invalid class: " + className);
+        }
+        Expressions::ClassReference classRef(std::weak_ptr<Nodes::Base>(), className);
+        return classRef;
+    }
 }
 
 class Interpreter {
@@ -573,7 +751,7 @@ class Interpreter {
         }
 };
 
-std::vector<std::string> combinedSymbols = {"==", ">=", "<=", "!=", "+=", "-=", "*=", "/=", "%=", "&&", "||", "/*", "*/", "**", "//"};
+std::vector<std::string> combinedSymbols = {"==", ">=", "<=", "!=", "+=", "-=", "*=", "/=", "%=", "&&", "||", "/*", "*/", "**", "//", "++", "--","::"};
 
 std::vector<std::string> Tokenizer::process(std::string in) {
     std::vector<std::string> data;
